@@ -1,6 +1,4 @@
-#!/usr/bin/env python2
-
-from __future__ import print_function
+#!/usr/bin/env python3
 
 import argparse
 import sys
@@ -92,7 +90,7 @@ def del_all_indexes(args):
     all = requests.get(url).json().keys()
 
     print("This will delete the following indexes: ", ", ".join(all))
-    inp = raw_input("Are you sure you want to continue? y/n [n]")
+    inp = input("Are you sure you want to continue? y/n [n]")
     if inp.lower() != 'y':
         return
 
@@ -137,7 +135,7 @@ def del_snapshots(args):
     matches = _get_matching_snapshots(server, port, match)
 
     print("This will delete the following snapshots: ", ", ".join(matches))
-    inp = raw_input("Are you sure you want to continue? y/n [n]")
+    inp = input("Are you sure you want to continue? y/n [n]")
     if inp.lower() != 'y':
         return
 
@@ -182,7 +180,7 @@ def del_indexes(args):
     matches = _get_matching_indexes(server, port, match)
 
     print("This will delete the following indexes: ", ", ".join(matches))
-    inp = raw_input("Are you sure you want to continue? y/n [n]")
+    inp = input("Are you sure you want to continue? y/n [n]")
     if inp.lower() != 'y':
         return
 
@@ -191,6 +189,38 @@ def del_indexes(args):
         url = 'http://{}:{}/{}'.format(server, port, ix)
         req = requests.delete(url)
         assert req.json()['acknowledged'] is True
+
+
+def del_field(args):
+    server = args.hostname
+    port = args.port
+    field = args.field
+    match = args.match
+    _openclose_indices(server, port, close=False)
+    matches = _get_matching_indexes(server, port, match)
+
+    print(f"This will delete the following field: {field}")
+    print("This operation will be performed in the indexes: ",
+          ", ".join(matches))
+
+    inp = input("Are you sure you want to continue? y/n [n]")
+    if inp.lower() != 'y':
+        return
+
+    for ix in matches:
+        print("Deleting {} index ".format(ix))
+        url = 'http://{}:{}/{}/_update_by_query'.format(server, port, ix)
+        settings = {
+            "script": {
+                "inline": f"ctx._source.remove(\"{field}\")"
+            },
+            "query": {
+                "exists": {"field": field}
+            }
+        }
+        print(settings)
+        req = requests.post(url, json=settings)
+        print(req.json())
 
 
 def set_replicas(args):
@@ -242,6 +272,7 @@ def main():
         'del_all_indexes': (del_all_indexes, "Delete all indexes"),
         'del_index': (del_indexes, "Delete some indexes"),
         'del_snapshots': (del_snapshots, "Delete some snapshots"),
+        'del_field': (del_field, "Delete a field"),
         'set_replicas': (set_replicas, "Configure ES: set number of replicas"),
     }
 
@@ -263,6 +294,9 @@ def main():
     parser.add_argument("--replicas",
                         help="Number of replicas to set",
                         default="0")
+    parser.add_argument("--field",
+                        help="Name of the field to delete",
+                        default="")
     args = parser.parse_args()
 
     def fallback(*args):
