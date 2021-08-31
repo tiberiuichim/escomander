@@ -50,7 +50,10 @@ def _openclose_indices(server, port, close=True):
         # print("{} index {}".format(op, ix))
         url = 'http://{}:{}/{}/{}'.format(server, port, ix, op)
         req = requests.post(url)
-        assert req.json()['acknowledged'] is True
+        res = req.json()
+        if res.get('acknowledged') is not True:
+            import pdb
+            pdb.set_trace()
 
 
 def make_snapshot(args):
@@ -195,6 +198,24 @@ def set_replicas(args):
     port = args.port
     match = args.match
 
+    print("Setting low disk thresholds")
+    settings = {
+        "persistent": {
+            "cluster.routing.allocation.disk.threshold_enabled": False,
+            "cluster.routing.allocation.disk.watermark.high": "500mb",
+            "cluster.routing.allocation.disk.watermark.low": "500mb",
+            "cluster.routing.allocation.disk.watermark.flood_stage": "500mb"
+        }
+    }
+    url = 'http://{}:{}/_cluster/settings'.format(server, port)
+    req = requests.put(url, json=settings)
+
+    if not (req.json().get('acknowledged') is True):
+        import pdb
+        pdb.set_trace()
+
+    assert req.json()['acknowledged'] is True
+
     if not args.replicas.isdigit():
         print("Please set --replicas to a valid number")
         sys.exit(1)
@@ -203,7 +224,9 @@ def set_replicas(args):
     _openclose_indices(server, port, close=False)
     matches = _get_matching_indexes(server, port, match)
 
-    settings = {"index": {"number_of_replicas": replicas}}
+    settings = {
+        "index": {"number_of_replicas": replicas},
+    }
     for ix in matches:
         url = 'http://{}:{}/{}/_settings'.format(server, port, ix)
         req = requests.put(url, json=settings)
